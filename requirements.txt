@@ -1,0 +1,4 @@
+asyncio
+cloudscraper
+selectolax
+quart

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}NoodleScraper - Modern Video Search{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h1><span style="color: var(--primary-color);">Noodle</span>Scraper</h1>
+    <p>A modern, dark-themed search engine for Noodle videos with image previews and quality selection.</p>
+    
+    <form class="search-form" action="{{ url_for('search') }}" method="get">
+        <input type="text" name="q" placeholder="Search for videos..." class="search-input" autofocus>
+        <button type="submit" class="search-button">Search</button>
+    </form>
+</div>
+{% endblock %}

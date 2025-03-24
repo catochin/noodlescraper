@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Video Player - NoodleScraper{% endblock %}
+
+{% block content %}
+<div class="video-detail" id="videoDetailContainer">
+    <div class="video-header">
+        <h1>Loading video...</h1>
+        <div class="tags"></div>
+    </div>
+    
+    <div class="video-player">
+        <!-- Use iframe for player_url -->
+        <iframe id="videoIframe" frameborder="0" allowfullscreen style="width:100%; height:500px;"></iframe>
+    </div>
+    
+    <div class="quality-selector">
+        <h3>Download or Watch Direct Links:</h3>
+        <div class="quality-buttons">
+            <!-- Quality buttons will be added by JavaScript -->
+            <p class="loading-message">Loading quality options...</p>
+        </div>
+    </div>
+    
+    <div id="noDataMessage" style="display: none; text-align: center; margin-top: 2rem; padding: 2rem; background-color: var(--surface-color-hover); border-radius: var(--border-radius);">
+        <h2>Video Data Not Available</h2>
+        <p>Please search for a video and click on it from the search results to view its details.</p>
+        <a href="{{ url_for('index') }}" class="btn" style="display: inline-block; margin-top: 1rem; padding: 0.75rem 1.5rem; background-color: var(--primary-color); color: white; text-decoration: none; border-radius: var(--border-radius);">Go to Search</a>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Try to get video data from localStorage
+        let videoData = {};
+        
+        try {
+            const localData = JSON.parse(localStorage.getItem('currentVideo') || '{}');
+            if (Object.keys(localData).length > 0) {
+                videoData = localData;
+            }
+        } catch (e) {
+            console.error('Error parsing video data:', e);
+        }
+        
+        // If we have video data, update the UI
+        if (Object.keys(videoData).length > 0) {
+            const loadingMessage = document.querySelector('.loading-message');
+            if (loadingMessage) {
+                loadingMessage.remove();
+            }
+            
+            // Update title
+            if (videoData.title) {
+                document.title = videoData.title + ' - NoodleScraper';
+                document.querySelector('.video-header h1').textContent = videoData.title;
+            }
+            
+            // Update tags
+            if (videoData.tags && videoData.tags.length > 0) {
+                const tagsContainer = document.querySelector('.video-header .tags');
+                tagsContainer.innerHTML = '';
+                videoData.tags.forEach(tag => {
+                    const tagEl = document.createElement('span');
+                    tagEl.className = 'tag';
+                    tagEl.textContent = tag;
+                    tagsContainer.appendChild(tagEl);
+                });
+            }
+            
+            // Set player URL if available
+            if (videoData.player_url) {
+                const videoIframe = document.getElementById('videoIframe');
+                videoIframe.src = videoData.player_url;
+            }
+            
+            // Create quality buttons as direct links
+            if (videoData.sources && videoData.sources.length > 0) {
+                const qualityButtonsContainer = document.querySelector('.quality-buttons');
+                qualityButtonsContainer.innerHTML = '';
+                
+                // Sort sources by quality (from highest to lowest)
+                const sortedSources = [...videoData.sources].sort((a, b) => {
+                    const qualityA = parseInt(a.label) || 0;
+                    const qualityB = parseInt(b.label) || 0;
+                    return qualityB - qualityA;
+                });
+                
+                sortedSources.forEach(source => {
+                    // Create link button
+                    const linkBtn = document.createElement('a');
+                    linkBtn.className = 'quality-button';
+                    linkBtn.href = source.file;
+                    linkBtn.target = '_blank';
+                    linkBtn.textContent = source.label + 'p';
+                    linkBtn.setAttribute('data-quality', source.label);
+                    
+                    // Add download attribute with formatted filename
+                    const filename = videoData.title 
+                        ? videoData.title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_' + source.label + 'p.mp4'
+                        : 'video_' + source.label + 'p.mp4';
+                    
+                    linkBtn.download = filename;
+                    
+                    qualityButtonsContainer.appendChild(linkBtn);
+                    
+                    // Add a space between buttons
+                    qualityButtonsContainer.appendChild(document.createTextNode(' '));
+                });
+            }
+        } else {
+            // Show "no data" message if no video data is available
+            document.getElementById('videoDetailContainer').style.display = 'none';
+            document.getElementById('noDataMessage').style.display = 'block';
+        }
+    });
+</script>
+{% endblock %}
