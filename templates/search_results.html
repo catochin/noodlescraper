@@ -39,25 +39,23 @@
             </a>
         {% endfor %}
     </div>
-    
+
     <div class="pagination">
         {% if page > 1 %}
-            <a href="{{ url_for('search', q=query, page=page-1) }}" class="page-link">Previous</a>
+            <a href="{{ url_for_with_params(request, 'search', q=query, page=page-1) }}" class="page-link">Previous</a>
         {% endif %}
-        
+
         {% for p in range(max(1, page-2), page+3) %}
-            <a href="{{ url_for('search', q=query, page=p) }}" class="page-link {% if p == page %}active{% endif %}">{{ p }}</a>
+            {% if p == page %}
+                <span class="page-link active">{{ p }}</span>
+            {% else %}
+                <a href="{{ url_for_with_params(request, 'search', q=query, page=p) }}" class="page-link">{{ p }}</a>
+            {% endif %}
         {% endfor %}
-        
-        {% if results.videos|length >= 10 %}
-            <a href="{{ url_for('search', q=query, page=page+1) }}" class="page-link">Next</a>
-        {% endif %}
+
+        <a href="{{ url_for_with_params(request, 'search', q=query, page=page+1) }}" class="page-link">Next</a>
     </div>
 {% else %}
-    <div class="error-page">
-        <h2>No videos found</h2>
-        <p>Try a different search query or check your spelling.</p>
-        <a href="{{ url_for('index') }}" class="btn">Go Back to Home</a>
-    </div>
+    <p>No videos found for "{{ query }}". Try a different search term.</p>
 {% endif %}
 {% endblock %}

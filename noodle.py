@@ -24,7 +24,6 @@ class NoodleScraper:
             stable_chrome_version = data['channels']['Stable']['version']
             self.user_agent = f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{stable_chrome_version} Safari/537.36'
         except Exception as e:
-            # Fallback user agent if the API request fails
             self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             print(f"Error getting Chrome version: {e}")
 
@@ -77,12 +76,13 @@ class NoodleScraper:
                 return None
         return None
 
-    def process_video(self, base_url, video):
+    def process_video(self, base_url, video, index):
         """Process a single video to extract its details
 
         Args:
             base_url (str): The base URL of the website
             video: The video element from the search results
+            index (int): The original index/position from the source site
 
         Returns:
             dict or None: The processed video data if successful, None otherwise
@@ -113,11 +113,16 @@ class NoodleScraper:
 
         playlist_data = self.parse_playlist(download_html, base_url, download_url)
         if playlist_data:
-            playlist_data.update({"title": title, "tags": video_tags, 'player_url': og_video})
+            playlist_data.update({
+                "title": title,
+                "tags": video_tags,
+                'player_url': og_video,
+                'source_order': index
+            })
         return playlist_data
 
     async def search_videos(self, query, page=0):
-        """Search for videos by query
+        """Search for videos by query with preserved ordering
 
         Args:
             query (str): The search query
@@ -138,8 +143,15 @@ class NoodleScraper:
 
         loop = asyncio.get_running_loop()
         with ThreadPoolExecutor() as pool:
-            tasks = [loop.run_in_executor(pool, self.process_video, base_url, video) for video in videos]
-            results['videos'] = [res for res in await asyncio.gather(*tasks) if res]
+            indexed_tasks = []
+            for i, video in enumerate(videos):
+                task = loop.run_in_executor(pool, self.process_video, base_url, video, i)
+                indexed_tasks.append((i, task))
+
+            completed_tasks = await asyncio.gather(*[task for _, task in indexed_tasks])
+            indexed_results = [(i, res) for i, res in enumerate(completed_tasks) if res]
+            indexed_results.sort(key=lambda x: x[1]['source_order'])
+            results['videos'] = [res for _, res in indexed_results]
 
         return results
 
@@ -177,5 +189,5 @@ class NoodleScraper:
 
         playlist_data = self.parse_playlist(download_html, self.base_url, download_url)
         if playlist_data:
-            playlist_data.update({"title": title, "tags": video_tags})
+            playlist_data.update({"title": title, "tags": video_tags, 'player_url': og_video})
         return playlist_data
