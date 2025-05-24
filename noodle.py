@@ -28,12 +28,19 @@ class NoodleScraper:
             self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             print(f"Error getting Chrome version: {e}")
 
+    def get_base(self, url):
+        try:
+            return self.scraper.get(url, headers=self.headers, cookies=self.cookies, timeout=10).url
+        except Exception as e:
+            print(f"Error loading {url}: {e}")
+            return None
+
     def fetch(self, url):
         """Fetch content from a URL with error handling
-        
+
         Args:
             url (str): The URL to fetch
-            
+
         Returns:
             str or None: The HTML content if successful, None otherwise
         """
@@ -45,12 +52,12 @@ class NoodleScraper:
 
     def parse_playlist(self, html, base_url, download_url):
         """Extract playlist data from a video download page
-        
+
         Args:
             html (str): The HTML content of the download page
             base_url (str): The base URL of the website
             download_url (str): The download URL of the video
-            
+
         Returns:
             dict or None: The parsed playlist data if successful, None otherwise
         """
@@ -72,11 +79,11 @@ class NoodleScraper:
 
     def process_video(self, base_url, video):
         """Process a single video to extract its details
-        
+
         Args:
             base_url (str): The base URL of the website
             video: The video element from the search results
-            
+
         Returns:
             dict or None: The processed video data if successful, None otherwise
         """
@@ -109,13 +116,13 @@ class NoodleScraper:
             playlist_data.update({"title": title, "tags": video_tags, 'player_url': og_video})
         return playlist_data
 
-    async def search_videos(self, query, page=1):
+    async def search_videos(self, query, page=0):
         """Search for videos by query
-        
+
         Args:
             query (str): The search query
-            page (int, optional): The page number for pagination. Defaults to 1.
-            
+            page (int, optional): The page number for pagination. Defaults to 0.
+
         Returns:
             dict: The search results including videos data or error message
         """
@@ -123,7 +130,7 @@ class NoodleScraper:
         if not r:
             return {'error': 'Failed to load page'}
 
-        base_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(f'{self.base_url}/video/{query}'))
+        base_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(self.get_base(f'{self.base_url}/video/{query}')))
         tree = HTMLParser(r)
         videos = tree.css('.list_videos .item_link')
 
@@ -138,10 +145,10 @@ class NoodleScraper:
 
     def get_video_by_id(self, video_id):
         """Get a specific video by its ID
-        
+
         Args:
             video_id (str): The ID of the video to fetch
-            
+
         Returns:
             dict or None: The video data if successful, None otherwise
         """
@@ -149,25 +156,25 @@ class NoodleScraper:
         video_html = self.fetch(video_url)
         if not video_html:
             return None
-        
+
         video_tree = HTMLParser(video_html)
-        
+
         og_video_tag = video_tree.css_first('meta[property="og:video"]')
         if not og_video_tag:
             return None
-            
+
         og_video = urljoin(self.base_url, og_video_tag.attributes.get('content'))
         download_url = og_video.replace('player', 'download')
-        
+
         og_title_tag = video_tree.css_first('meta[property="og:title"]')
         title = og_title_tag.attributes.get('content') if og_title_tag else "Untitled"
-        
+
         video_tags = [tag.strip() for content in video_tree.css('meta[property="video:tag"]') for tag in content.attributes.get('content', '').split(',')]
-        
+
         download_html = self.fetch(download_url)
         if not download_html:
             return None
-            
+
         playlist_data = self.parse_playlist(download_html, self.base_url, download_url)
         if playlist_data:
             playlist_data.update({"title": title, "tags": video_tags})
