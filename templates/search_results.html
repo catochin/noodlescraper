@@ -5,13 +5,15 @@
 {% block content %}
 <h1>Search Results for "{{ query }}"</h1>
 
-{% if results.videos %}
+{% if results.error %}
+    <p>{{ results.error }}. Try again in a moment.</p>
+{% elif results.videos %}
     <div class="videos-grid">
         {% for video in results.videos %}
-            <a href="{{ url_for('video_detail', video_id=video.id) }}" class="video-card" data-video='{{ video|tojson }}'>
+            <a href="{{ url_for('video_detail', video_id=video.id) }}" class="video-card">
                 <div class="video-thumbnail">
                     {% if video.image %}
-                        <img src="{{ video.image }}" alt="{{ video.title }}">
+                        <img src="{{ video.image }}" alt="{{ video.title }}" loading="lazy">
                     {% else %}
                         <div style="width: 100%; height: 100%; background-color: #333; display: flex; align-items: center; justify-content: center;">
                             <span>No Preview</span>
@@ -21,20 +23,10 @@
                 <div class="video-info">
                     <h3 class="video-title">{{ video.title }}</h3>
                     <div class="video-meta">
-                        {% if video.duration %}
-                            <span>{{ (video.duration / 60)|int }}:{{ (video.duration % 60)|string|zfill(2) }}</span>
+                        {% if video.duration_text %}
+                            <span>{{ video.duration_text }}</span>
                         {% endif %}
                     </div>
-                    {% if video.tags %}
-                        <div class="tags">
-                            {% for tag in video.tags[:3] %}
-                                <span class="tag">{{ tag }}</span>
-                            {% endfor %}
-                            {% if video.tags|length > 3 %}
-                                <span class="tag">+{{ video.tags|length - 3 }}</span>
-                            {% endif %}
-                        </div>
-                    {% endif %}
                 </div>
             </a>
         {% endfor %}

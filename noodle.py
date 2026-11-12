@@ -1,193 +1,269 @@
 import asyncio
 import json
-from concurrent.futures import ThreadPoolExecutor
-from urllib.parse import urljoin, urlparse
-from cloudscraper import create_scraper as Session
+import re
+from urllib.parse import quote_plus, urlparse
+
+from curl_cffi.requests import AsyncSession
+from curl_cffi.requests.errors import RequestsError
 from selectolax.parser import HTMLParser
 
 
+def _parse_duration(text: str) -> int | None:
+    """Seconds from a listing label like ``32:20`` or ``1:30:00``."""
+    parts = text.strip().split(":")
+    if len(parts) > 3 or not all(part.isdigit() for part in parts):
+        return None
+    seconds = 0
+    for part in parts:
+        seconds = seconds * 60 + int(part)
+    return seconds
+
+
+def _format_duration(seconds: int | None) -> str | None:
+    """``M:SS``, or ``H:MM:SS`` once the video passes an hour."""
+    if not seconds:
+        return None
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
 class NoodleScraper:
-    """A class-based API for scraping and processing videos from noodlemagazine.com"""
+    """Async scraper for noodlemagazine.com built on curl-cffi.
 
-    def __init__(self):
-        """Initialize the NoodleScraper with default settings"""
-        self.scraper = Session()
-        self._set_chrome_version()
-        self.headers = {'User-Agent': self.user_agent}
-        self.cookies = {'age_verification': '1'}
-        self.base_url = 'https://noodlemagazine.com'
+    curl_cffi impersonates a real Chrome TLS fingerprint (the ``"chrome"``
+    alias always resolves to the latest Chrome the installed lib supports),
+    so there is no need to fetch or hand-craft User-Agent strings.
 
-    def _set_chrome_version(self):
-        """Get the latest stable Chrome version for the user agent"""
+    The scraper is intentionally lazy: a search costs exactly one request
+    (the listing page), and direct video links are fetched on demand --
+    two requests -- only when a video is actually opened.
+    """
+
+    def __init__(self, impersonate: str = "chrome", timeout: int = 15):
+        self.base_url = "https://noodlemagazine.com"
+        self.timeout = timeout
+        self.session = AsyncSession(
+            impersonate=impersonate,
+            timeout=timeout,
+            cookies={"age_verification": "1"},
+        )
+
+    async def close(self):
+        """Release the underlying curl handles."""
+        await self.session.close()
+
+    # ------------------------------------------------------------------ http
+
+    async def _get(self, url: str, referer: str | None = None):
+        """GET a URL, returning the response or None on any failure."""
         try:
-            data = self.scraper.get('https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json').json()
-            stable_chrome_version = data['channels']['Stable']['version']
-            self.user_agent = f'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{stable_chrome_version} Safari/537.36'
-        except Exception as e:
-            self.user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            print(f"Error getting Chrome version: {e}")
-
-    def get_base(self, url):
-        try:
-            return self.scraper.get(url, headers=self.headers, cookies=self.cookies, timeout=10).url
-        except Exception as e:
+            return await self.session.get(
+                url,
+                timeout=self.timeout,
+                headers={"Referer": referer} if referer else None,
+            )
+        except RequestsError as e:
             print(f"Error loading {url}: {e}")
             return None
 
-    def fetch(self, url):
-        """Fetch content from a URL with error handling
+    @staticmethod
+    def _origin(url: str) -> str:
+        """Scheme and host of a URL, used to keep requests on one origin."""
+        parts = urlparse(url)
+        return f"{parts.scheme}://{parts.netloc}"
 
-        Args:
-            url (str): The URL to fetch
+    # ---------------------------------------------------------------- search
 
-        Returns:
-            str or None: The HTML content if successful, None otherwise
+    async def search_videos(
+        self, query: str, page: int = 0, with_sources: bool = False
+    ) -> dict:
+        """Search for videos. One request, results in source-site order.
+
+        With ``with_sources`` the direct links, tags and durations are merged
+        into every result on demand -- two extra upstream requests per video,
+        fetched with bounded concurrency.
         """
-        try:
-            return self.scraper.get(url, headers=self.headers, cookies=self.cookies, timeout=10).text
-        except Exception as e:
-            print(f"Error loading {url}: {e}")
+        response = await self._get(
+            f"{self.base_url}/video/{quote_plus(query)}?p={page}"
+        )
+        if response is None or response.status_code != 200:
+            return {"error": "Failed to load page"}
+
+        # Follow redirects implicitly: the site serves content from a
+        # rotating subdomain, so resolve the origin from the final URL.
+        base_url = self._origin(str(response.url))
+
+        tree = HTMLParser(response.text)
+        videos = []
+        for node in tree.css(".list_videos .item_link"):
+            item = self._parse_listing_item(node)
+            if item:
+                videos.append(item)
+
+        if with_sources and videos:
+            semaphore = asyncio.Semaphore(5)
+
+            async def enrich(item: dict) -> None:
+                async with semaphore:
+                    details = await self.get_video_by_id(item["id"])
+                if details is None:
+                    return
+                item.update(
+                    {
+                        "sources": details["sources"],
+                        "tags": details["tags"],
+                        "duration": details["duration"],
+                        "duration_text": details["duration_text"],
+                        "player_url": details["player_url"],
+                    }
+                )
+
+            await asyncio.gather(*(enrich(item) for item in videos))
+
+        return {"base_url": base_url, "query": query, "page": page, "videos": videos}
+
+    @staticmethod
+    def _parse_listing_item(node) -> dict | None:
+        """Extract one search-result card from the listing markup."""
+        href = node.attributes.get("href")
+        if not href:
             return None
 
-    def parse_playlist(self, html, base_url, download_url):
-        """Extract playlist data from a video download page
+        parts = urlparse(href)
+        video_id = parts.path.rstrip("/").rsplit("/", 1)[-1]
+        if not video_id:
+            return None
 
-        Args:
-            html (str): The HTML content of the download page
-            base_url (str): The base URL of the website
-            download_url (str): The download URL of the video
+        image = ""
+        img = node.css_first("img")
+        if img is not None:
+            image = img.attributes.get("data-src") or img.attributes.get("src") or ""
 
-        Returns:
-            dict or None: The parsed playlist data if successful, None otherwise
+        title = "Untitled"
+        title_node = node.css_first(".i_info .title")
+        if title_node is not None:
+            title = title_node.text(strip=True) or title
+        elif img is not None:
+            title = img.attributes.get("alt") or title
+
+        time_node = node.css_first(".m_time")
+        duration_seconds = (
+            _parse_duration(time_node.text(strip=True))
+            if time_node is not None
+            else None
+        )
+
+        return {
+            "id": video_id,
+            "title": title,
+            "image": image,
+            "duration": duration_seconds,
+            "duration_text": _format_duration(duration_seconds),
+        }
+
+    # ----------------------------------------------------------------- video
+
+    async def get_video_by_id(self, video_id: str) -> dict | None:
+        """Fetch one video page plus its player page to extract direct links.
+
+        The playlist lives on the player page (``og:video`` URL) and that
+        page checks the Referer, so the video page URL is sent along.
+        """
+        video_id = video_id.strip("/")
+        response = await self._get(f"{self.base_url}/watch/{video_id}")
+        if response is None or response.status_code != 200:
+            return None
+
+        video_page_url = str(response.url)
+        base_url = self._origin(video_page_url)
+        tree = HTMLParser(response.text)
+
+        og_video_tag = tree.css_first('meta[property="og:video"]')
+        if og_video_tag is None:
+            return None
+
+        # og:video points to the player CDN host; the same path is served on
+        # the site origin, so rewrite it to keep player and links on one host.
+        player_url = urlparse(og_video_tag.attributes.get("content") or "")
+        player_url = player_url._replace(
+            scheme=urlparse(base_url).scheme, netloc=urlparse(base_url).netloc
+        ).geturl()
+
+        og_title_tag = tree.css_first('meta[property="og:title"]')
+        title = og_title_tag.attributes.get("content") if og_title_tag else None
+        title = title or "Untitled"
+
+        tags = [
+            tag.strip()
+            for node in tree.css('meta[property="video:tag"]')
+            for tag in (node.attributes.get("content") or "").split(",")
+            if tag.strip()
+        ]
+
+        duration: int | None = None
+        duration_tag = tree.css_first('meta[property="video:duration"]')
+        if duration_tag is not None:
+            raw_duration = duration_tag.attributes.get("content") or ""
+            if raw_duration.isdigit():
+                duration = int(raw_duration)
+
+        player_response = await self._get(player_url, referer=video_page_url)
+        if player_response is None:
+            return None
+
+        playlist = self.parse_playlist(player_response.text, video_id)
+        if playlist is None:
+            return None
+
+        sources = sorted(
+            playlist.get("sources") or [], key=self._quality_key, reverse=True
+        )
+        playlist.update(
+            {
+                "title": title,
+                "tags": tags,
+                "duration": duration,
+                "duration_text": _format_duration(duration),
+                "player_url": player_url,
+                "file_name": self._slug(title),
+                "sources": sources,
+            }
+        )
+        return playlist
+
+    # ------------------------------------------------------------- parsing
+
+    @staticmethod
+    def parse_playlist(html: str, video_id: str) -> dict | None:
+        """Pull the ``window.playlist`` object out of any inline script.
+
+        ``JSONDecoder.raw_decode`` stops at the first complete JSON value,
+        so trailing semicolons or following JS statements are ignored.
         """
         tree = HTMLParser(html)
-        script_tag = tree.css_first("script")
-        if script_tag:
-            script_text = script_tag.text()
-            json_start = script_text.find('window.playlist = ') + len('window.playlist = ')
-            json_end = script_text.find(';', json_start)
-            playlist_json = script_text[json_start:json_end]
-
+        for script in tree.css("script"):
+            text = script.text(deep=True)
+            match = re.search(r"window\.playlist\s*=\s*", text)
+            if not match:
+                continue
             try:
-                playlist_data = json.loads(playlist_json)
-                video_id = urlparse(download_url).path.split('/')[-1].split('?')[0]
-                return {'id': video_id, **playlist_data}
+                data, _ = json.JSONDecoder().raw_decode(text[match.end() :])
             except json.JSONDecodeError:
-                return None
+                continue
+            return {"id": video_id, **data}
         return None
 
-    def process_video(self, base_url, video, index):
-        """Process a single video to extract its details
+    @staticmethod
+    def _quality_key(source: dict) -> int:
+        """Numeric quality of a source label like ``"720"`` or ``"720p"``."""
+        match = re.search(r"\d+", str(source.get("label", "")))
+        return int(match.group()) if match else 0
 
-        Args:
-            base_url (str): The base URL of the website
-            video: The video element from the search results
-            index (int): The original index/position from the source site
-
-        Returns:
-            dict or None: The processed video data if successful, None otherwise
-        """
-        video_url = urljoin(base_url, video.attributes.get('href'))
-        video_html = self.fetch(video_url)
-        if not video_html:
-            return None
-
-        video_tree = HTMLParser(video_html)
-
-        og_video_tag = video_tree.css_first('meta[property="og:video"]')
-        if not og_video_tag:
-            return None
-        og_video = urljoin(base_url, og_video_tag.attributes.get('content'))
-        og_old_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(og_video))
-        og_video = og_video.replace(og_old_url, base_url)
-        download_url = og_video.replace('player', 'download')
-
-        og_title_tag = video_tree.css_first('meta[property="og:title"]')
-        title = og_title_tag.attributes.get('content') if og_title_tag else "Untitled"
-
-        video_tags = [tag.strip() for content in video_tree.css('meta[property="video:tag"]') for tag in content.attributes.get('content', '').split(',')]
-
-        download_html = self.fetch(download_url)
-        if not download_html:
-            return None
-
-        playlist_data = self.parse_playlist(download_html, base_url, download_url)
-        if playlist_data:
-            playlist_data.update({
-                "title": title,
-                "tags": video_tags,
-                'player_url': og_video,
-                'source_order': index
-            })
-        return playlist_data
-
-    async def search_videos(self, query, page=0):
-        """Search for videos by query with preserved ordering
-
-        Args:
-            query (str): The search query
-            page (int, optional): The page number for pagination. Defaults to 0.
-
-        Returns:
-            dict: The search results including videos data or error message
-        """
-        r = self.fetch(f'{self.base_url}/video/{query}?p={page}')
-        if not r:
-            return {'error': 'Failed to load page'}
-
-        base_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(self.get_base(f'{self.base_url}/video/{query}')))
-        tree = HTMLParser(r)
-        videos = tree.css('.list_videos .item_link')
-
-        results = {'base_url': base_url, 'query': query, 'page': page, 'videos': []}
-
-        loop = asyncio.get_running_loop()
-        with ThreadPoolExecutor() as pool:
-            indexed_tasks = []
-            for i, video in enumerate(videos):
-                task = loop.run_in_executor(pool, self.process_video, base_url, video, i)
-                indexed_tasks.append((i, task))
-
-            completed_tasks = await asyncio.gather(*[task for _, task in indexed_tasks])
-            indexed_results = [(i, res) for i, res in enumerate(completed_tasks) if res]
-            indexed_results.sort(key=lambda x: x[1]['source_order'])
-            results['videos'] = [res for _, res in indexed_results]
-
-        return results
-
-    def get_video_by_id(self, video_id):
-        """Get a specific video by its ID
-
-        Args:
-            video_id (str): The ID of the video to fetch
-
-        Returns:
-            dict or None: The video data if successful, None otherwise
-        """
-        video_url = f'{self.base_url}/video/{video_id}'
-        video_html = self.fetch(video_url)
-        if not video_html:
-            return None
-
-        video_tree = HTMLParser(video_html)
-
-        og_video_tag = video_tree.css_first('meta[property="og:video"]')
-        if not og_video_tag:
-            return None
-
-        og_video = urljoin(self.base_url, og_video_tag.attributes.get('content'))
-        download_url = og_video.replace('player', 'download')
-
-        og_title_tag = video_tree.css_first('meta[property="og:title"]')
-        title = og_title_tag.attributes.get('content') if og_title_tag else "Untitled"
-
-        video_tags = [tag.strip() for content in video_tree.css('meta[property="video:tag"]') for tag in content.attributes.get('content', '').split(',')]
-
-        download_html = self.fetch(download_url)
-        if not download_html:
-            return None
-
-        playlist_data = self.parse_playlist(download_html, self.base_url, download_url)
-        if playlist_data:
-            playlist_data.update({"title": title, "tags": video_tags, 'player_url': og_video})
-        return playlist_data
+    @staticmethod
+    def _slug(title: str) -> str:
+        """Filesystem-safe slug used for suggested download file names."""
+        slug = re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")
+        return slug or "video"

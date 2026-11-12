@@ -1,7 +1,5 @@
 fastapi
 uvicorn[standard]
 jinja2
-python-multipart
-asyncio
-cloudscraper
+curl-cffi
 selectolax
