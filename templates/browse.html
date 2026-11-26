@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{{ data.page_title or 'Browse' }} - NoodleScraper{% endblock %}
+
+{% block content %}
+<div class="page-wrap">
+  <div class="sec-head">
+    <h1>
+      <i data-lucide="flame"></i>{{ data.page_title or path }}
+    </h1>
+    <div class="head-controls">
+      <a class="pill {{ 'active' if browse_source == 'studentki' else '' }}" href="{{ url_for_with_params(request, 'browse', source='studentki', path='/videos') }}">
+        Sex-Studentki
+      </a>
+      <a class="pill {{ 'active' if browse_source == 'porno365' else '' }}" href="{{ url_for_with_params(request, 'browse', source='porno365', path='/') }}">
+        Porno365
+      </a>
+      {% for s in data.sort_links %}
+        <a class="pill {{ 'active' if s.selected else '' }}" href="{{ url_for_with_params(request, 'browse', source=browse_source, path=s.path, f=s.f) }}">
+          {{ s.label }}
+        </a>
+      {% endfor %}
+      <span class="page-badge">Page {{ page }}</span>
+    </div>
+  </div>
+
+  {% if data.filters %}
+    <div class="filter-strip">
+      {% for flt in data.filters[:28] %}
+        {% if flt.is_category %}
+          <span class="chip active"><i data-lucide="folder"></i>{{ flt.label }}</span>
+        {% else %}
+          <a class="chip {{ 'active' if flt.selected else '' }}" href="{{ url_for_with_params(request, 'browse', source=browse_source, path=flt.path or path, f=flt.f) }}">
+            {% if flt.selected %}&times; {% else %}+ {% endif %}{{ flt.label }}
+            {% if flt.count %}<span class="chip-count">{{ flt.count }}</span>{% endif %}
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if data.error %}
+    <div class="status-panel">
+      <h1>Error</h1>
+      <p>{{ data.error }}. Check mirror status or try refreshing mirrors.</p>
+      <a class="btn-red" href="{{ url_for('mirrors_page') }}">Check Mirrors</a>
+    </div>
+  {% elif data.models_grid %}
+    <div class="models-grid">
+      {% for m in data.models_grid %}
+        <a class="model-card" href="{{ url_for_with_params(request, 'browse', source='porno365', path=m.path) }}">
+          <div class="m-thumb">
+            {% if m.image %}
+              <img src="{{ m.image }}" alt="{{ m.name }}" loading="lazy" />
+            {% else %}
+              <div class="thumb-empty">No Photo</div>
+            {% endif %}
+            {% if m.count %}<span class="dur">{{ m.count }}</span>{% endif %}
+          </div>
+          <div class="m-meta">
+            <div class="m-name">{{ m.name }}</div>
+            {% if m.eng_name %}<div class="m-sub">{{ m.eng_name }}</div>{% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% elif data.videos %}
+    <div class="grid">
+      {% for video in data.videos %}
+        <a href="{{ url_for('video_detail_source', source=browse_source, video_id=video.id) }}" class="card">
+          <div class="thumb">
+            {% if video.image %}
+              <img src="{{ video.image }}" alt="{{ video.title }}" loading="lazy" />
+            {% else %}
+              <div class="thumb-empty">No Preview</div>
+            {% endif %}
+            <span class="src-badge {{ browse_source }}">{{ 'Porno365' if browse_source == 'porno365' else 'Studentki' }}</span>
+            {% if video.views %}<span class="views-pill">{{ video.views }}</span>{% endif %}
+            {% if video.duration_text %}<span class="dur">{{ video.duration_text }}</span>{% endif %}
+          </div>
+          <div class="meta">
+            <div class="ch-ico">{{ 'P' if browse_source == 'porno365' else 'S' }}</div>
+            <div class="info">
+              <h3>{{ video.title }}</h3>
+              {% if video.models %}
+                <div class="sub-meta">{{ video.models | join(', ') }}</div>
+              {% elif video.rating %}
+                <div class="sub-meta">Rating: {{ video.rating }}</div>
+              {% endif %}
+            </div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="status-panel">
+      <p>No videos found in this category/filter.</p>
+      <a class="btn-red" href="{{ url_for_with_params(request, 'browse', source=browse_source, path='/' if browse_source == 'porno365' else '/videos') }}">Reset</a>
+    </div>
+  {% endif %}
+
+  {% if data.videos or data.models_grid %}
+    <nav class="pagination" aria-label="Pagination">
+      {% if page > 1 %}
+        <a href="{{ url_for_with_params(request, 'browse', source=browse_source, path=path, f=f, page=page-1) }}" class="page-link">Previous</a>
+      {% endif %}
+
+      <span class="page-link active">{{ page }}</span>
+
+      {% if data.has_next %}
+        <a href="{{ url_for_with_params(request, 'browse', source=browse_source, path=path, f=f, page=page+1) }}" class="page-link">Next</a>
+      {% endif %}
+    </nav>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Mirrors &amp; Latency - NoodleScraper{% endblock %}
+
+{% block content %}
+<div class="page-wrap">
+  <div class="sec-head">
+    <h1><i data-lucide="globe"></i>Mirrors &amp; Latency</h1>
+    <div class="head-controls">
+      <button id="refresh-mirrors-btn" type="button" class="btn-red">
+        <i data-lucide="refresh-cw"></i>Re-scan All via Bing
+      </button>
+    </div>
+  </div>
+
+  {% if studentki_snap.last_error %}
+    <div class="warn-banner"><strong>Sex-Studentki:</strong> {{ studentki_snap.last_error }}</div>
+  {% endif %}
+  {% if porno365_snap.last_error %}
+    <div class="warn-banner"><strong>Porno365:</strong> {{ porno365_snap.last_error }}</div>
+  {% endif %}
+
+  <div class="mirror-table-wrap" style="margin-bottom: 28px;">
+    <table class="mirror-table">
+      <thead>
+        <tr>
+          <th>Aggregator</th>
+          <th>Active Origin</th>
+          <th>Discovery</th>
+          <th>Status</th>
+          <th>Mode</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>NoodleMagazine</strong></td>
+          <td>{{ noodle_ping.origin }}</td>
+          <td>direct</td>
+          <td>
+            <span class="{{ 'dot-live' if noodle_ping.alive else 'dot-dead' }}" style="display:inline-block;margin-right:6px;"></span>
+            {{ 'Online' if noodle_ping.alive else 'Offline' }} ({{ noodle_ping.latency_ms }} ms)
+          </td>
+          <td>Direct TLS</td>
+        </tr>
+        <tr>
+          <td><strong>Sex-Studentki</strong></td>
+          <td>{{ studentki_snap.best_origin }}</td>
+          <td>{{ studentki_snap.discovery_source }}</td>
+          <td>
+            <span class="{{ 'dot-live' if studentki_snap.alive_count > 0 else 'dot-dead' }}" style="display:inline-block;margin-right:6px;"></span>
+            {{ studentki_snap.alive_count }}/{{ studentki_snap.total_count }} alive
+            {% if studentki_snap.refreshing %}<span class="page-badge" style="margin-left:6px;">Scanning...</span>{% endif %}
+          </td>
+          <td>HTTPS + Live API test</td>
+        </tr>
+        <tr>
+          <td><strong>Porno365</strong></td>
+          <td>{{ porno365_snap.best_origin }}</td>
+          <td>{{ porno365_snap.discovery_source }}</td>
+          <td>
+            <span class="{{ 'dot-live' if porno365_snap.alive_count > 0 else 'dot-dead' }}" style="display:inline-block;margin-right:6px;"></span>
+            {{ porno365_snap.alive_count }}/{{ porno365_snap.total_count }} alive
+            {% if porno365_snap.refreshing %}<span class="page-badge" style="margin-left:6px;">Scanning...</span>{% endif %}
+          </td>
+          <td>SSL-bypass + redirect + Live API test</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  {% for title_lbl, snap in [('Sex-Studentki Discovered Mirrors', studentki_snap), ('Porno365 Discovered Mirrors', porno365_snap)] %}
+    <div class="sec-head">
+      <h2><i data-lucide="activity"></i>{{ title_lbl }}</h2>
+    </div>
+    <div class="mirror-table-wrap" style="margin-bottom: 28px;">
+      <table class="mirror-table">
+        <thead>
+          <tr>
+            <th>Domain</th>
+            <th>Resolved Origin</th>
+            <th>State</th>
+            <th>API Test</th>
+            <th>HTTP</th>
+            <th>Ping</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in snap.mirrors %}
+            <tr>
+              <td>
+                <strong>{{ m.domain }}</strong>
+                {% if m.origin == snap.best_origin and m.alive %}
+                  <span class="page-badge" style="margin-left:8px;color:#22c55e;">ACTIVE</span>
+                {% endif %}
+              </td>
+              <td>{{ m.origin }}</td>
+              <td>
+                <span class="{{ 'dot-live' if m.alive else 'dot-dead' }}" style="display:inline-block;margin-right:6px;"></span>
+                {{ 'Alive' if m.alive else (m.error or 'Dead') }}
+              </td>
+              <td>
+                {% if m.api_verified %}
+                  <span style="color:#22c55e;font-weight:600;">PASSED</span>
+                {% else %}
+                  <span style="color:var(--muted);">-</span>
+                {% endif %}
+              </td>
+              <td>{{ m.status or '-' }}</td>
+              <td><strong>{{ m.latency_ms }} ms</strong></td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" style="color: var(--muted);">Background scan in progress...</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

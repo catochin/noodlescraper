@@ -6,33 +6,75 @@
 <div class="page-wrap">
   <div class="sec-head">
     <h1><i data-lucide="search"></i>Results for "{{ query }}"</h1>
-    <span class="page-badge">Page {{ page }}</span>
+    <div class="head-controls">
+      <a class="pill {{ 'active' if active_source == 'all' else '' }}" href="{{ url_for_with_params(request, 'search', q=query, source='all', page=1) }}">
+        All ({{ (results.counts.noodle if results.counts else 0) + (results.counts.studentki if results.counts else 0) + (results.counts.porno365 if results.counts else 0) }})
+      </a>
+      <a class="pill {{ 'active' if active_source == 'noodle' else '' }}" href="{{ url_for_with_params(request, 'search', q=query, source='noodle', page=1) }}">
+        Noodle{% if results.counts and active_source in ('all', 'noodle') %} ({{ results.counts.noodle }}){% endif %}
+      </a>
+      <a class="pill {{ 'active' if active_source == 'studentki' else '' }}" href="{{ url_for_with_params(request, 'search', q=query, source='studentki', page=1) }}">
+        Studentki{% if results.counts and active_source in ('all', 'studentki') %} ({{ results.counts.studentki }}){% endif %}
+      </a>
+      <a class="pill {{ 'active' if active_source == 'porno365' else '' }}" href="{{ url_for_with_params(request, 'search', q=query, source='porno365', page=1) }}">
+        Porno365{% if results.counts and active_source in ('all', 'porno365') %} ({{ results.counts.porno365 }}){% endif %}
+      </a>
+      <span class="page-badge">Page {{ page }}</span>
+    </div>
   </div>
 
-  {% if results.error %}
+  {% if results.errors %}
+    {% for src_name, err_msg in results.errors.items() %}
+      <div class="warn-banner"><strong>{{ src_name }}:</strong> {{ err_msg }}</div>
+    {% endfor %}
+  {% endif %}
+
+  {% if results.profiles %}
+    <div class="filter-strip">
+      {% for prof in results.profiles %}
+        <a class="chip" href="{{ url_for_with_params(request, 'browse', source=prof.source or 'studentki', path=prof.path) }}">
+          <i data-lucide="user"></i>{{ prof.name }}
+          {% if prof.count %}<span class="chip-count">{{ prof.count }}</span>{% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if results.error and not results.videos and not results.profiles %}
     <div class="status-panel">
       <h1>Error</h1>
-      <p>{{ results.error }}. Try again in a moment.</p>
+      <p>{{ results.error }}. Try switching source or refreshing mirrors.</p>
       <a class="btn-red" href="{{ url_for('index') }}">Back to Home</a>
     </div>
   {% elif results.videos %}
     <div class="grid">
       {% for video in results.videos %}
-        <a href="{{ url_for('video_detail', video_id=video.id) }}" class="card">
+        <a href="{{ url_for('video_detail_source', source=video.source, video_id=video.id) }}" class="card">
           <div class="thumb">
             {% if video.image %}
               <img src="{{ video.image }}" alt="{{ video.title }}" loading="lazy" />
             {% else %}
               <div class="thumb-empty">No Preview</div>
             {% endif %}
+            <span class="src-badge {{ video.source }}">
+              {% if video.source == 'noodle' %}Noodle{% elif video.source == 'porno365' %}Porno365{% else %}Studentki{% endif %}
+            </span>
+            {% if video.views %}
+              <span class="views-pill">{{ video.views }}</span>
+            {% endif %}
             {% if video.duration_text %}
               <span class="dur">{{ video.duration_text }}</span>
             {% endif %}
           </div>
           <div class="meta">
-            <div class="ch-ico">N</div>
+            <div class="ch-ico">{% if video.source == 'noodle' %}N{% elif video.source == 'porno365' %}P{% else %}S{% endif %}</div>
             <div class="info">
               <h3>{{ video.title }}</h3>
+              {% if video.models %}
+                <div class="sub-meta">{{ video.models | join(', ') }}</div>
+              {% elif video.rating %}
+                <div class="sub-meta">Rating: {{ video.rating }}</div>
+              {% endif %}
             </div>
           </div>
         </a>
@@ -41,22 +83,24 @@
 
     <nav class="pagination" aria-label="Pagination">
       {% if page > 1 %}
-        <a href="{{ url_for_with_params(request, 'search', q=query, page=page-1) }}" class="page-link">Previous</a>
+        <a href="{{ url_for_with_params(request, 'search', q=query, source=active_source, page=page-1) }}" class="page-link">Previous</a>
       {% endif %}
 
       {% for p in range(max(1, page-2), page+3) %}
         {% if p == page %}
           <span class="page-link active">{{ p }}</span>
         {% else %}
-          <a href="{{ url_for_with_params(request, 'search', q=query, page=p) }}" class="page-link">{{ p }}</a>
+          <a href="{{ url_for_with_params(request, 'search', q=query, source=active_source, page=p) }}" class="page-link">{{ p }}</a>
         {% endif %}
       {% endfor %}
 
-      <a href="{{ url_for_with_params(request, 'search', q=query, page=page+1) }}" class="page-link">Next</a>
+      {% if results.has_next %}
+        <a href="{{ url_for_with_params(request, 'search', q=query, source=active_source, page=page+1) }}" class="page-link">Next</a>
+      {% endif %}
     </nav>
   {% else %}
     <div class="status-panel">
-      <p>No videos found for "{{ query }}". Try a different search term.</p>
+      <p>No videos found for "{{ query }}". Try a different query or switch source.</p>
       <a class="btn-red" href="{{ url_for('index') }}">New Search</a>
     </div>
   {% endif %}

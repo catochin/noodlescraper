@@ -19,15 +19,31 @@
 
   <div class="big-n" aria-hidden="true">N</div>
   <h1><span class="r">Noodle</span>Scraper</h1>
-  <p>Fast, dark-themed video scraper with embedded playback, direct quality links, and server-rendered shareable pages.</p>
+  <p>Triple-engine aggregator: NoodleMagazine + Sex-Studentki + Porno365 with automatic Bing mirror discovery, SSL/redirect resolution, latency ranking, and proxied HTML5 playback.</p>
+
+  <div class="source-tabs" role="tablist" aria-label="Source selector">
+    <button type="button" class="source-tab {{ 'active' if active_source == 'all' else '' }}" data-source="all">
+      <i data-lucide="layers"></i>All Sources
+    </button>
+    <button type="button" class="source-tab {{ 'active' if active_source == 'noodle' else '' }}" data-source="noodle">
+      <i data-lucide="film"></i>NoodleMagazine
+    </button>
+    <button type="button" class="source-tab {{ 'active' if active_source == 'studentki' else '' }}" data-source="studentki">
+      <i data-lucide="flame"></i>Sex-Studentki
+    </button>
+    <button type="button" class="source-tab {{ 'active' if active_source == 'porno365' else '' }}" data-source="porno365">
+      <i data-lucide="tv"></i>Porno365
+    </button>
+  </div>
 
   <form class="hero-search" action="{{ url_for('search') }}" method="get">
     <i data-lucide="search"></i>
+    <input type="hidden" id="hero-source-input" name="source" value="{{ active_source }}" />
     <input
       id="hero-search-input"
       type="search"
       name="q"
-      placeholder="Search for videos..."
+      placeholder="Search for videos or models..."
       aria-label="Search for videos"
       autocomplete="off"
       autofocus
@@ -36,18 +52,102 @@
   </form>
 
   <div class="chips">
-    <a class="chip" href="{{ url_for_with_params(request, 'search', q='trending') }}">
+    <a class="chip" href="{{ url_for_with_params(request, 'search', q='trending', source=active_source) }}">
       <i data-lucide="flame" class="fire"></i>Trending
     </a>
-    <a class="chip" href="{{ url_for_with_params(request, 'search', q='4k') }}">
-      <i data-lucide="monitor"></i>4K
+    <a class="chip" href="{{ url_for_with_params(request, 'search', q='4k', source='noodle') }}">
+      <i data-lucide="monitor"></i>4K (Noodle)
     </a>
-    <a class="chip" href="{{ url_for_with_params(request, 'search', q='hd') }}">
-      <i data-lucide="clapperboard"></i>HD
+    <a class="chip" href="{{ url_for_with_params(request, 'browse', source='studentki', path='/rus') }}">
+      <i data-lucide="clapperboard"></i>Русское (Studentki)
     </a>
-    <a class="chip" href="{{ url_for_with_params(request, 'search', q='popular') }}">
-      <i data-lucide="sparkles"></i>Popular
+    <a class="chip" href="{{ url_for_with_params(request, 'browse', source='porno365', path='/models') }}">
+      <i data-lucide="users"></i>Модели (Porno365)
     </a>
   </div>
 </section>
+
+<div class="page-wrap">
+  {% if categories %}
+    <div class="sec-head">
+      <h2><i data-lucide="grid-2x2"></i>Sex-Studentki Categories</h2>
+      <a class="page-badge" href="{{ url_for_with_params(request, 'browse', source='studentki', path='/videos') }}">Browse All &rarr;</a>
+    </div>
+    <div class="cat-grid">
+      {% for cat in categories[:8] %}
+        <a class="cat-card" href="{{ url_for_with_params(request, 'browse', source='studentki', path=cat.path) }}">
+          {% if cat.image %}
+            <img src="{{ cat.image }}" alt="{{ cat.name }}" loading="lazy" />
+          {% endif %}
+          <div class="cat-overlay">
+            <span class="cat-name">{{ cat.name }}</span>
+            {% if cat.count %}
+              <span class="cat-cnt">{{ cat.count }}</span>
+            {% endif %}
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if studentki_latest %}
+    <div class="sec-head">
+      <h2><i data-lucide="clock"></i>Latest on Sex-Studentki</h2>
+      <a class="page-badge" href="{{ url_for_with_params(request, 'browse', source='studentki', path='/videos') }}">More &rarr;</a>
+    </div>
+    <div class="grid" style="margin-bottom: 36px;">
+      {% for video in studentki_latest %}
+        <a href="{{ url_for('video_detail_source', source='studentki', video_id=video.id) }}" class="card">
+          <div class="thumb">
+            {% if video.image %}
+              <img src="{{ video.image }}" alt="{{ video.title }}" loading="lazy" />
+            {% else %}
+              <div class="thumb-empty">No Preview</div>
+            {% endif %}
+            <span class="src-badge studentki">Studentki</span>
+            {% if video.views %}<span class="views-pill">{{ video.views }}</span>{% endif %}
+            {% if video.duration_text %}<span class="dur">{{ video.duration_text }}</span>{% endif %}
+          </div>
+          <div class="meta">
+            <div class="ch-ico">S</div>
+            <div class="info">
+              <h3>{{ video.title }}</h3>
+              {% if video.models %}<div class="sub-meta">{{ video.models | join(', ') }}</div>{% endif %}
+            </div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if porno365_latest %}
+    <div class="sec-head">
+      <h2><i data-lucide="tv"></i>Latest on Porno365</h2>
+      <a class="page-badge" href="{{ url_for_with_params(request, 'browse', source='porno365', path='/') }}">More &rarr;</a>
+    </div>
+    <div class="grid">
+      {% for video in porno365_latest %}
+        <a href="{{ url_for('video_detail_source', source='porno365', video_id=video.id) }}" class="card">
+          <div class="thumb">
+            {% if video.image %}
+              <img src="{{ video.image }}" alt="{{ video.title }}" loading="lazy" />
+            {% else %}
+              <div class="thumb-empty">No Preview</div>
+            {% endif %}
+            <span class="src-badge porno365">Porno365</span>
+            {% if video.views %}<span class="views-pill">{{ video.views }}</span>{% endif %}
+            {% if video.duration_text %}<span class="dur">{{ video.duration_text }}</span>{% endif %}
+          </div>
+          <div class="meta">
+            <div class="ch-ico">P</div>
+            <div class="info">
+              <h3>{{ video.title }}</h3>
+              {% if video.rating %}<div class="sub-meta">Rating: {{ video.rating }}</div>{% endif %}
+            </div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
 {% endblock %}

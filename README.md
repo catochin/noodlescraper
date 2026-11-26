@@ -1,22 +1,24 @@
-# 🍜 NoodleScraper
+# NoodleScraper
 
-**NoodleScraper** provides Noodlemagazine's video scraper with web interface, video player, sources, previews and custom scraper API if interface not needed.
+Triple-aggregator async video search, player, stream proxy, and mirror health monitor built on FastAPI, `curl-cffi`, and `selectolax` (Lexbor).
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat-square&logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-green?style=flat-square&logo=fastapi)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
-## ✨ Features
+## Features
 
-- 🌐 Web interface for browsing and searching videos
-- 📺 Integrated video player with direct-link quality selection
-- 🖼️ Video preview thumbnails
-- 🔌 JSON API for programmatic access
-- ⚡ Truly async: `curl-cffi` with Chrome TLS impersonation (`impersonate="chrome"` always tracks the latest Chrome the library supports — no User-Agent scraping)
-- 💸 Cheap on the upstream: a search costs **one** request, opening a video costs **two**
-- 🔗 Shareable video links — `/video/{id}` renders server-side, no browser-side data passing
+- Triple-source search (`all`, `noodle`, `studentki`, `porno365`) with per-source counts and interleaved results
+- Automatic mirror discovery via Bing SERP, concurrent latency probing, local JSON caching, and runtime failover:
+  - Sex-Studentki: strict HTTPS mirror ranking (`.mirror_cache.json`)
+  - Porno365: SSL-verify-disabled probe with HTTP fallback and redirect target resolution (`.porno365_mirror_cache.json`)
+- Category, tag, model, and multi-filter browsing (`/browse`) for both Sex-Studentki (`f=`) and Porno365 (`cc=`), plus live model search
+- Built-in playback:
+  - NoodleMagazine: iframe player + sorted direct `.mp4` links
+  - Sex-Studentki & Porno365: Range-capable HTML5 stream proxies (`/stream/studentki/{id}` and `/stream/porno365/{id}?q={idx}`) with quality switching and clickable timecodes
+- Server-rendered Jinja2 UI and JSON REST API (`/docs`)
 
-## 🚀 Installation
+## Installation
 
 ```bash
 git clone https://github.com/catochin/noodlescraper
@@ -25,72 +27,63 @@ pip install -r requirements.txt
 python run.py
 ```
 
-## 🔧 Usage
+Open `http://127.0.0.1:6969`. Interactive API documentation is available at `http://127.0.0.1:6969/docs`.
 
-After installation, the web interface will be available at:
+## Architecture
+
+| File | Role |
+| --- | --- |
+| `app.py` | FastAPI routes, Jinja2 template rendering, Range-capable MP4 stream proxies, and JSON API |
+| `scraper.py` | `UnifiedScraper` coordinating startup mirror refresh, source dispatch, and merged search |
+| `noodle.py` | Async NoodleMagazine scraper (`curl-cffi` Chrome TLS impersonation + `JSONDecoder.raw_decode` playlist extraction) |
+| `studentki.py` | Async Sex-Studentki scraper (AJAX `POST` search, category/filter browsing, timecodes, models/tags, and stream resolution) |
+| `porno365.py` | Async Porno365 scraper (`GET` search + AJAX model lookup, `cc=` multi-filters, JWPlayer multi-quality extraction, and comment timecodes) |
+| `mirrors.py` | Configurable `MirrorManager` for Bing discovery, SSL/redirect probing, latency ranking, and failover |
+| `run.py` | Uvicorn development entrypoint (`0.0.0.0:6969`, hot reload) |
+
+## API Endpoints
+
+### Search
+```text
+GET /api/search?q={query}&page={page}&source={all|noodle|studentki|porno365}&with_sources={0|1}
 ```
-http://127.0.0.1:6969
+Searches across one or all aggregators. Returns `videos`, `profiles` (matching models/authors), per-source `counts`, and pagination state.
+
+### Browse
+```text
+GET /api/browse?source={studentki|porno365}&path={path}&f={filters}&cc={filters}&page={page}
 ```
+Loads category, model, or feed listings along with sort links and multi-tag filter chips.
 
-## 🏗️ Architecture
-
-The project consists of two main components:
-
-### 🧠 `noodle.py`
-
-Async scraper built on `curl_cffi.requests.AsyncSession`:
-
-- 🕸️ One request per search page — results are parsed straight from the listing in source-site order
-- 🎬 Two requests per video page load (`/watch/{id}` → player page) — the `window.playlist` object with direct `.mp4` links is pulled on demand, with the `Referer` header the player page requires
-- 🧼 Robust playlist extraction via `JSONDecoder.raw_decode` (tolerates trailing JS)
-
-### 🖥️ `app.py`
-
-FastAPI web interface that:
-
-- 👤 Renders the frontend (server-side video pages)
-- 🔗 Exposes the scraper via JSON API endpoints
-
-## 🔌 API Endpoints
-
-### 🔍 Search Videos
-```
-GET /api/search?q={query}&page={page}
-```
-Returns listing data for the given query (`id`, `title`, `image`, `duration` in seconds plus `duration_text`), in source-site order — one upstream request.
-
-Opt-in enrichment for mass grabbers:
-```
-GET /api/search?q={query}&page={page}&with_sources=1
-```
-Merges `sources` (sorted high→low), `tags`, `player_url` and precise `duration` into every result. Costs two upstream requests per video, fetched with bounded concurrency — use deliberately.
-
-### 📹 Get Video Details
-```
+### Video Details
+```text
+GET /api/video/{source}/{video_id}
 GET /api/video/{video_id}
 ```
-Returns title, tags, duration, player URL and sorted direct links (highest quality first).
+Returns metadata, tags, actors, clickable timecodes, related items, and playable/downloadable stream sources.
 
-### 💚 Health Check
+### Stream Proxies
+```text
+GET /stream/studentki/{video_id}?download={0|1}
+GET /stream/porno365/{video_id}?q={quality_index}&download={0|1}
 ```
-GET /health
-```
-Returns application health status.
+Proxies upstream MP4 streams with `Range` support and required `Referer` headers, automatically refreshing expired stream tokens on `403`/`404`/`410`.
 
-## 📋 Requirements
+### Mirrors & Health
+```text
+GET  /api/mirrors
+POST /api/mirrors/refresh
+GET  /health
+```
+Inspects NoodleMagazine reachability plus all probed Sex-Studentki and Porno365 mirrors, or triggers an immediate Bing re-scan and latency re-rank.
+
+## Requirements
 
 - Python 3.10+
-- FastAPI + Uvicorn (async web framework and ASGI server)
-- curl-cffi (Chrome-impersonating HTTP client)
-- selectolax (fast C-based HTML parsing)
-- Jinja2 (templating)
+- `fastapi`, `uvicorn[standard]`, `jinja2`
+- `curl-cffi`
+- `selectolax` (Lexbor backend)
 
-## ⚖️ License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-<p align="center">
-Made with ❤️ for video content enthusiasts
-</p>
+MIT — see [LICENSE](LICENSE).

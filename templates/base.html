@@ -4,11 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}NoodleScraper{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=4" />
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=6" />
   {% block head %}{% endblock %}
 </head>
 <body>
 {% set current_q = request.query_params.get('q', '') %}
+{% set current_source = active_source if active_source is defined else request.query_params.get('source', 'all') %}
+{% set badges = mirror_badges() %}
+{% set s_badge = badges.studentki %}
+{% set p_badge = badges.porno365 %}
 <header>
   <button id="menu-toggle" class="menu-btn" type="button" aria-label="Toggle menu">
     <i data-lucide="menu"></i>
@@ -29,10 +33,20 @@
       value="{{ current_q }}"
       autocomplete="off"
     />
+    <select id="top-source-select" name="source" class="source-select" aria-label="Video source">
+      <option value="all" {{ 'selected' if current_source == 'all' else '' }}>All</option>
+      <option value="noodle" {{ 'selected' if current_source == 'noodle' else '' }}>Noodle</option>
+      <option value="studentki" {{ 'selected' if current_source == 'studentki' else '' }}>Studentki</option>
+      <option value="porno365" {{ 'selected' if current_source == 'porno365' else '' }}>Porno365</option>
+    </select>
     <span class="kbd">Ctrl <b>K</b></span>
   </form>
 
   <div class="hdr-right">
+    <a class="pill" href="{{ url_for('mirrors_page') }}" title="Active mirrors status">
+      <span class="{{ 'dot-live' if (s_badge.alive > 0 and p_badge.alive > 0) else 'dot-dead' }}"></span>
+      <span>Mirrors ({{ s_badge.alive + p_badge.alive }}/{{ s_badge.total + p_badge.total }})</span>
+    </a>
     <a class="pill" href="/docs" target="_blank" rel="noopener">
       <i data-lucide="code-2"></i>
       <span>API</span>
@@ -48,37 +62,71 @@
       <a class="{{ 'active' if request.url.path == '/' else '' }}" href="{{ url_for('index') }}">
         <i data-lucide="house"></i>Home
       </a>
-      <a class="{{ 'active' if current_q == 'trending' else '' }}" href="{{ url_for_with_params(request, 'search', q='trending') }}">
+      <a class="{{ 'active' if current_q == 'trending' else '' }}" href="{{ url_for_with_params(request, 'search', q='trending', source=current_source) }}">
         <i data-lucide="flame"></i>Trending
       </a>
-      <a class="{{ 'active' if current_q == 'popular' else '' }}" href="{{ url_for_with_params(request, 'search', q='popular') }}">
+      <a class="{{ 'active' if current_q == 'popular' else '' }}" href="{{ url_for_with_params(request, 'search', q='popular', source=current_source) }}">
         <i data-lucide="compass"></i>Popular
       </a>
-      <a class="{{ 'active' if current_q == 'new' else '' }}" href="{{ url_for_with_params(request, 'search', q='new') }}">
+      <a class="{{ 'active' if current_q == 'new' else '' }}" href="{{ url_for_with_params(request, 'search', q='new', source=current_source) }}">
         <i data-lucide="sparkles"></i>Latest
       </a>
     </nav>
 
     <div class="sep"></div>
-    <div class="label">QUICK SEARCH</div>
+    <div class="label">NOODLE QUICK</div>
     <nav class="nav lib">
-      <a class="{{ 'active' if current_q == '4k' else '' }}" href="{{ url_for_with_params(request, 'search', q='4k') }}">
+      <a class="{{ 'active' if current_q == '4k' and current_source == 'noodle' else '' }}" href="{{ url_for_with_params(request, 'search', q='4k', source='noodle') }}">
         <i data-lucide="monitor"></i>4K UHD
       </a>
-      <a class="{{ 'active' if current_q == 'hd' else '' }}" href="{{ url_for_with_params(request, 'search', q='hd') }}">
+      <a class="{{ 'active' if current_q == 'hd' and current_source == 'noodle' else '' }}" href="{{ url_for_with_params(request, 'search', q='hd', source='noodle') }}">
         <i data-lucide="tv-minimal-play"></i>HD Videos
       </a>
-      <a class="{{ 'active' if current_q == 'pov' else '' }}" href="{{ url_for_with_params(request, 'search', q='pov') }}">
+      <a class="{{ 'active' if current_q == 'pov' and current_source == 'noodle' else '' }}" href="{{ url_for_with_params(request, 'search', q='pov', source='noodle') }}">
         <i data-lucide="video"></i>POV
       </a>
-      <a class="{{ 'active' if current_q == 'solo' else '' }}" href="{{ url_for_with_params(request, 'search', q='solo') }}">
-        <i data-lucide="square-play"></i>Solo
+    </nav>
+
+    <div class="sep"></div>
+    <div class="label">SEX-STUDENTKI</div>
+    <nav class="nav lib">
+      <a class="{{ 'active' if request.url.path == '/browse' and request.query_params.get('source', 'studentki') == 'studentki' and request.query_params.get('path') == '/videos/feed' else '' }}" href="{{ url_for_with_params(request, 'browse', source='studentki', path='/videos/feed') }}">
+        <i data-lucide="zap"></i>Подборка
+      </a>
+      <a class="{{ 'active' if request.url.path == '/browse' and request.query_params.get('source', 'studentki') == 'studentki' and request.query_params.get('path') == '/hq-porn' else '' }}" href="{{ url_for_with_params(request, 'browse', source='studentki', path='/hq-porn') }}">
+        <i data-lucide="star"></i>Красивый секс
+      </a>
+      <a class="{{ 'active' if request.url.path == '/browse' and request.query_params.get('source', 'studentki') == 'studentki' and request.query_params.get('path') == '/rus' else '' }}" href="{{ url_for_with_params(request, 'browse', source='studentki', path='/rus') }}">
+        <i data-lucide="clapperboard"></i>Русское
+      </a>
+      <a class="{{ 'active' if request.url.path == '/browse' and request.query_params.get('source', 'studentki') == 'studentki' and request.query_params.get('path') == '/anal' else '' }}" href="{{ url_for_with_params(request, 'browse', source='studentki', path='/anal') }}">
+        <i data-lucide="flame"></i>Анал
+      </a>
+    </nav>
+
+    <div class="sep"></div>
+    <div class="label">PORNO365</div>
+    <nav class="nav lib">
+      <a class="{{ 'active' if request.url.path == '/browse' and request.query_params.get('source') == 'porno365' and request.query_params.get('path') == '/' else '' }}" href="{{ url_for_with_params(request, 'browse', source='porno365', path='/') }}">
+        <i data-lucide="play"></i>Новые видео
+      </a>
+      <a class="{{ 'active' if request.url.path == '/browse' and request.query_params.get('source') == 'porno365' and request.query_params.get('path') == '/russkoe' else '' }}" href="{{ url_for_with_params(request, 'browse', source='porno365', path='/russkoe') }}">
+        <i data-lucide="clapperboard"></i>Русское
+      </a>
+      <a class="{{ 'active' if request.url.path == '/browse' and request.query_params.get('source') == 'porno365' and request.query_params.get('path') == '/asian' else '' }}" href="{{ url_for_with_params(request, 'browse', source='porno365', path='/asian') }}">
+        <i data-lucide="sparkles"></i>Азиатки
+      </a>
+      <a class="{{ 'active' if request.url.path == '/browse' and request.query_params.get('source') == 'porno365' and request.query_params.get('path') == '/models' else '' }}" href="{{ url_for_with_params(request, 'browse', source='porno365', path='/models') }}">
+        <i data-lucide="users"></i>Модели
       </a>
     </nav>
 
     <div class="sep"></div>
     <div class="label">SYSTEM</div>
     <nav class="nav lib">
+      <a class="{{ 'active' if request.url.path == '/mirrors' else '' }}" href="{{ url_for('mirrors_page') }}">
+        <i data-lucide="globe"></i>Mirrors ({{ s_badge.alive + p_badge.alive }}/{{ s_badge.total + p_badge.total }})
+      </a>
       <a href="/docs" target="_blank" rel="noopener">
         <i data-lucide="braces"></i>API Docs
       </a>
@@ -91,14 +139,14 @@
   <main>
     {% block content %}{% endblock %}
     <footer>
-      <span>NoodleScraper</span>
+      <span>NoodleScraper &times; Sex-Studentki &times; Porno365</span>
       <span>&copy; {{ now().year }}</span>
     </footer>
   </main>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
-<script src="{{ url_for('static', path='/js/main.js') }}?v=4"></script>
+<script src="{{ url_for('static', path='/js/main.js') }}?v=6"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
