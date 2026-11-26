@@ -3,9 +3,11 @@
 {% block title %}Error - NoodleScraper{% endblock %}
 
 {% block content %}
-<div class="error-page">
-    <h1>Oops!</h1>
+<div class="page-wrap">
+  <div class="status-panel">
+    <h1>404</h1>
     <p>{{ error }}</p>
-    <a href="{{ url_for('index') }}" class="btn">Go Back to Home</a>
+    <a href="{{ url_for('index') }}" class="btn-red">Back to Home</a>
+  </div>
 </div>
 {% endblock %}

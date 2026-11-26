@@ -1,45 +1,104 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}NoodleScraper{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    {% block head %}{% endblock %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}NoodleScraper{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=4" />
+  {% block head %}{% endblock %}
 </head>
 <body>
-    <canvas id="networkGraph" class="network-graph"></canvas>
+{% set current_q = request.query_params.get('q', '') %}
+<header>
+  <button id="menu-toggle" class="menu-btn" type="button" aria-label="Toggle menu">
+    <i data-lucide="menu"></i>
+  </button>
 
-    <header>
-        <div class="container">
-            <div class="header-content">
-                <div class="logo">
-                    <a href="{{ url_for('index') }}"><span>Noodle</span>Scraper</a>
-                </div>
-                <form class="search-form" action="{{ url_for('search') }}" method="get">
-                    <input type="text" name="q" placeholder="Search videos..." class="search-input" value="{{ request.query_params.get('q', '') }}">
-                    <button type="submit" class="search-button">Search</button>
-                </form>
-            </div>
-        </div>
-    </header>
+  <a class="logo" href="{{ url_for('index') }}" aria-label="NoodleScraper home">
+    <span class="spark">&#10022;</span><span class="mark">N</span>
+    <span class="word"><span class="r">Noodle</span>Scraper</span>
+  </a>
 
-    <main class="main-content">
-        <div class="container">
-            {% block content %}{% endblock %}
-        </div>
-    </main>
+  <form class="top-search" action="{{ url_for('search') }}" method="get">
+    <i data-lucide="search"></i>
+    <input
+      id="top-search-input"
+      type="search"
+      name="q"
+      placeholder="Search videos..."
+      value="{{ current_q }}"
+      autocomplete="off"
+    />
+    <span class="kbd">Ctrl <b>K</b></span>
+  </form>
 
+  <div class="hdr-right">
+    <a class="pill" href="/docs" target="_blank" rel="noopener">
+      <i data-lucide="code-2"></i>
+      <span>API</span>
+    </a>
+  </div>
+</header>
+
+<div id="sidebar-backdrop" class="backdrop"></div>
+
+<div class="app">
+  <aside id="sidebar">
+    <nav class="nav">
+      <a class="{{ 'active' if request.url.path == '/' else '' }}" href="{{ url_for('index') }}">
+        <i data-lucide="house"></i>Home
+      </a>
+      <a class="{{ 'active' if current_q == 'trending' else '' }}" href="{{ url_for_with_params(request, 'search', q='trending') }}">
+        <i data-lucide="flame"></i>Trending
+      </a>
+      <a class="{{ 'active' if current_q == 'popular' else '' }}" href="{{ url_for_with_params(request, 'search', q='popular') }}">
+        <i data-lucide="compass"></i>Popular
+      </a>
+      <a class="{{ 'active' if current_q == 'new' else '' }}" href="{{ url_for_with_params(request, 'search', q='new') }}">
+        <i data-lucide="sparkles"></i>Latest
+      </a>
+    </nav>
+
+    <div class="sep"></div>
+    <div class="label">QUICK SEARCH</div>
+    <nav class="nav lib">
+      <a class="{{ 'active' if current_q == '4k' else '' }}" href="{{ url_for_with_params(request, 'search', q='4k') }}">
+        <i data-lucide="monitor"></i>4K UHD
+      </a>
+      <a class="{{ 'active' if current_q == 'hd' else '' }}" href="{{ url_for_with_params(request, 'search', q='hd') }}">
+        <i data-lucide="tv-minimal-play"></i>HD Videos
+      </a>
+      <a class="{{ 'active' if current_q == 'pov' else '' }}" href="{{ url_for_with_params(request, 'search', q='pov') }}">
+        <i data-lucide="video"></i>POV
+      </a>
+      <a class="{{ 'active' if current_q == 'solo' else '' }}" href="{{ url_for_with_params(request, 'search', q='solo') }}">
+        <i data-lucide="square-play"></i>Solo
+      </a>
+    </nav>
+
+    <div class="sep"></div>
+    <div class="label">SYSTEM</div>
+    <nav class="nav lib">
+      <a href="/docs" target="_blank" rel="noopener">
+        <i data-lucide="braces"></i>API Docs
+      </a>
+      <a href="/health" target="_blank" rel="noopener">
+        <i data-lucide="activity"></i>Health
+      </a>
+    </nav>
+  </aside>
+
+  <main>
+    {% block content %}{% endblock %}
     <footer>
-        <div class="container">
-            <p>&copy; {{ now().year }} NoodleScraper - Made with ❤️</p>
-        </div>
+      <span>NoodleScraper</span>
+      <span>&copy; {{ now().year }}</span>
     </footer>
+  </main>
+</div>
 
-    <script src="{{ url_for('static', path='/js/main.js') }}"></script>
-    {% block scripts %}{% endblock %}
+<script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="{{ url_for('static', path='/js/main.js') }}?v=4"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

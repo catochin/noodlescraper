@@ -1,53 +1,64 @@
 {% extends "base.html" %}
 
-{% block title %}Search Results for "{{ query }}" - NoodleScraper{% endblock %}
+{% block title %}{{ query }} - NoodleScraper{% endblock %}
 
 {% block content %}
-<h1>Search Results for "{{ query }}"</h1>
+<div class="page-wrap">
+  <div class="sec-head">
+    <h1><i data-lucide="search"></i>Results for "{{ query }}"</h1>
+    <span class="page-badge">Page {{ page }}</span>
+  </div>
 
-{% if results.error %}
-    <p>{{ results.error }}. Try again in a moment.</p>
-{% elif results.videos %}
-    <div class="videos-grid">
-        {% for video in results.videos %}
-            <a href="{{ url_for('video_detail', video_id=video.id) }}" class="video-card">
-                <div class="video-thumbnail">
-                    {% if video.image %}
-                        <img src="{{ video.image }}" alt="{{ video.title }}" loading="lazy">
-                    {% else %}
-                        <div style="width: 100%; height: 100%; background-color: #333; display: flex; align-items: center; justify-content: center;">
-                            <span>No Preview</span>
-                        </div>
-                    {% endif %}
-                </div>
-                <div class="video-info">
-                    <h3 class="video-title">{{ video.title }}</h3>
-                    <div class="video-meta">
-                        {% if video.duration_text %}
-                            <span>{{ video.duration_text }}</span>
-                        {% endif %}
-                    </div>
-                </div>
-            </a>
-        {% endfor %}
+  {% if results.error %}
+    <div class="status-panel">
+      <h1>Error</h1>
+      <p>{{ results.error }}. Try again in a moment.</p>
+      <a class="btn-red" href="{{ url_for('index') }}">Back to Home</a>
     </div>
-
-    <div class="pagination">
-        {% if page > 1 %}
-            <a href="{{ url_for_with_params(request, 'search', q=query, page=page-1) }}" class="page-link">Previous</a>
-        {% endif %}
-
-        {% for p in range(max(1, page-2), page+3) %}
-            {% if p == page %}
-                <span class="page-link active">{{ p }}</span>
+  {% elif results.videos %}
+    <div class="grid">
+      {% for video in results.videos %}
+        <a href="{{ url_for('video_detail', video_id=video.id) }}" class="card">
+          <div class="thumb">
+            {% if video.image %}
+              <img src="{{ video.image }}" alt="{{ video.title }}" loading="lazy" />
             {% else %}
-                <a href="{{ url_for_with_params(request, 'search', q=query, page=p) }}" class="page-link">{{ p }}</a>
+              <div class="thumb-empty">No Preview</div>
             {% endif %}
-        {% endfor %}
-
-        <a href="{{ url_for_with_params(request, 'search', q=query, page=page+1) }}" class="page-link">Next</a>
+            {% if video.duration_text %}
+              <span class="dur">{{ video.duration_text }}</span>
+            {% endif %}
+          </div>
+          <div class="meta">
+            <div class="ch-ico">N</div>
+            <div class="info">
+              <h3>{{ video.title }}</h3>
+            </div>
+          </div>
+        </a>
+      {% endfor %}
     </div>
-{% else %}
-    <p>No videos found for "{{ query }}". Try a different search term.</p>
-{% endif %}
+
+    <nav class="pagination" aria-label="Pagination">
+      {% if page > 1 %}
+        <a href="{{ url_for_with_params(request, 'search', q=query, page=page-1) }}" class="page-link">Previous</a>
+      {% endif %}
+
+      {% for p in range(max(1, page-2), page+3) %}
+        {% if p == page %}
+          <span class="page-link active">{{ p }}</span>
+        {% else %}
+          <a href="{{ url_for_with_params(request, 'search', q=query, page=p) }}" class="page-link">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      <a href="{{ url_for_with_params(request, 'search', q=query, page=page+1) }}" class="page-link">Next</a>
+    </nav>
+  {% else %}
+    <div class="status-panel">
+      <p>No videos found for "{{ query }}". Try a different search term.</p>
+      <a class="btn-red" href="{{ url_for('index') }}">New Search</a>
+    </div>
+  {% endif %}
+</div>
 {% endblock %}

@@ -1,15 +1,53 @@
 {% extends "base.html" %}
 
-{% block title %}NoodleScraper - Modern Video Search{% endblock %}
+{% block title %}NoodleScraper{% endblock %}
 
 {% block content %}
-<div class="hero">
-    <h1><span style="color: var(--primary-color);">Noodle</span>Scraper</h1>
-    <p>A modern, dark-themed search engine for Noodle videos with image previews and quality selection.</p>
+<section class="hero">
+  <div class="arc" aria-hidden="true">
+    <span class="rune" style="top:60px;left:120px">&#5833;</span>
+    <span class="rune" style="top:120px;left:60px">&#5839;</span>
+    <span class="rune" style="top:200px;left:28px">&#5835;</span>
+    <span class="rune" style="top:290px;left:14px">&#5850;</span>
+    <span class="rune" style="top:60px;right:120px">&#5841;</span>
+    <span class="rune" style="top:120px;right:60px">&#5833;</span>
+    <span class="rune" style="top:200px;right:28px">&#5839;</span>
+    <span class="rune" style="top:290px;right:14px">&#5835;</span>
+    <span class="rune" style="top:14px;left:210px">&#5850;</span>
+    <span class="rune" style="top:14px;right:210px">&#5841;</span>
+  </div>
 
-    <form class="search-form" action="{{ url_for('search') }}" method="get">
-        <input type="text" name="q" placeholder="Search for videos..." class="search-input" autofocus>
-        <button type="submit" class="search-button">Search</button>
-    </form>
-</div>
+  <div class="big-n" aria-hidden="true">N</div>
+  <h1><span class="r">Noodle</span>Scraper</h1>
+  <p>Fast, dark-themed video scraper with embedded playback, direct quality links, and server-rendered shareable pages.</p>
+
+  <form class="hero-search" action="{{ url_for('search') }}" method="get">
+    <i data-lucide="search"></i>
+    <input
+      id="hero-search-input"
+      type="search"
+      name="q"
+      placeholder="Search for videos..."
+      aria-label="Search for videos"
+      autocomplete="off"
+      autofocus
+    />
+    <button class="btn-red" type="submit">Search</button>
+  </form>
+
+  <div class="chips">
+    <a class="chip" href="{{ url_for_with_params(request, 'search', q='trending') }}">
+      <i data-lucide="flame" class="fire"></i>Trending
+    </a>
+    <a class="chip" href="{{ url_for_with_params(request, 'search', q='4k') }}">
+      <i data-lucide="monitor"></i>4K
+    </a>
+    <a class="chip" href="{{ url_for_with_params(request, 'search', q='hd') }}">
+      <i data-lucide="clapperboard"></i>HD
+    </a>
+    <a class="chip" href="{{ url_for_with_params(request, 'search', q='popular') }}">
+      <i data-lucide="sparkles"></i>Popular
+    </a>
+  </div>
+</section>
 {% endblock %}

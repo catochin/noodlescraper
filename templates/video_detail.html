@@ -3,35 +3,48 @@
 {% block title %}{{ video.title }} - NoodleScraper{% endblock %}
 
 {% block content %}
-<div class="video-detail">
-    <div class="video-header">
-        <h1>{{ video.title }}</h1>
+<div class="page-wrap">
+  <div class="detail-wrap">
+    <div class="player-frame">
+      <iframe src="{{ video.player_url }}" allow="autoplay; fullscreen" allowfullscreen></iframe>
+    </div>
+
+    <div class="detail-panel">
+      <div class="detail-top">
+        <h1 class="detail-title">{{ video.title }}</h1>
         {% if video.duration_text %}
-            <div class="video-meta">Duration: {{ video.duration_text }}</div>
+          <span class="detail-dur">{{ video.duration_text }}</span>
         {% endif %}
-        {% if video.tags %}
-            <div class="tags">
-                {% for tag in video.tags[:8] %}
-                    <span class="tag">{{ tag }}</span>
-                {% endfor %}
-            </div>
-        {% endif %}
-    </div>
+      </div>
 
-    <div class="video-player">
-        <iframe src="{{ video.player_url }}" frameborder="0" allowfullscreen style="width:100%; height:500px;"></iframe>
-    </div>
-
-    <div class="quality-selector">
-        <h3>Download or Watch Direct Links:</h3>
-        <div class="quality-buttons">
-            {% for source in video.sources %}
-                <a class="quality-button" href="{{ source.file }}" target="_blank" rel="noopener"
-                   download="{{ video.file_name }}_{{ source.label }}p.mp4">{{ source.label }}p</a>
-            {% else %}
-                <p>No direct links found for this video.</p>
-            {% endfor %}
+      {% if video.tags %}
+        <div class="tags-row">
+          {% for tag in video.tags[:12] %}
+            <a class="chip" href="{{ url_for_with_params(request, 'search', q=tag) }}">{{ tag }}</a>
+          {% endfor %}
         </div>
+      {% endif %}
+
+      <div class="sources-box">
+        <span class="sources-title">Download or watch direct links</span>
+        <div class="sources-row">
+          {% for source in video.sources %}
+            <a
+              class="pill"
+              href="{{ source.file }}"
+              target="_blank"
+              rel="noopener"
+              download="{{ video.file_name }}_{{ source.label }}p.mp4"
+            >
+              <i data-lucide="download"></i>
+              <span>{{ source.label }}p</span>
+            </a>
+          {% else %}
+            <span class="sources-title">No direct links found for this video.</span>
+          {% endfor %}
+        </div>
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}
